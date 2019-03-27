@@ -27,22 +27,257 @@
     [super viewDidLoad];
     // Do any additional setup after loading the view, typically from a nib.
     
-    RACSubject *sb = [RACSubject subject];
+    [self map];
     
-    // flattenMap作用：把原信号的内容映射成一个新信号，并return返回给一个RACStream类型数据。实际上是根据前一个信号传递进来的参数重新建立了一个信号，这个参数，可能会在创建信号的时候用到，也有可能用不到。
-    RACSignal *sig = [sb flattenMap:^__kindof RACSignal * _Nullable(id  _Nullable value) {
-        NSString *didValue = [NSString stringWithFormat:@"key:%@", value];
+}
+
+
+
+/**
+ flattenMap 对传递过来的信号进行二次定义
+ 也可以多次定义
+ */
+
+- (void)flattenMap
+{
+    
+    RACSignal *sg1 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        [subscriber sendNext:@"1"];
         return nil;
     }];
-    //订阅信号
-    [sig subscribeNext:^(id _Nullable x) {
-        NSLog(@"订阅绑定数据：%@", x);
+    
+    // 对传递过来的信号进行二次定义
+    RACSignal *flSig = [sg1 flattenMap:^__kindof RACSignal * _Nullable(id  _Nullable value) {
+         return [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+            [subscriber sendNext:[NSString stringWithFormat:@"flattenMap-%@",value]];
+            return nil;
+        }];
+     
+    }];
+    
+    
+    [flSig subscribeNext:^(id  _Nullable x) {
+        NSLog(@"%@",x);
+    }];
+    
+    
+    
+}
+
+
+
+
+/**
+    信号的延迟订阅
+ */
+
+- (void)delay
+{
+    RACSignal *sig1 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        
+        [subscriber sendNext:@"5s之后打印"];
+        [subscriber sendCompleted];
+        return nil;
+    }];
+    // 延迟5秒订阅信号
+    [[sig1 delay:5]subscribeNext:^(id  _Nullable x) {
+        NSLog(@"%@",x);
+    }];
+    
+    
+}
+
+
+
+
+/**
+    信号的过滤
+*/
+
+- (void)filter
+{
+    RACSignal *sig = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        // 发送多个文本
+        [subscriber sendNext:@"100"];
+        [subscriber sendNext:@"200"];
+        [subscriber sendNext:@"300"];
+        [subscriber sendCompleted];
+        return nil;
+    }];
+    
+    
+    [[sig filter:^BOOL(NSString * value) {
+        // 可以进行过滤
+        if (value.integerValue > 200) {
+            return  value;
+        }
+        return nil;
+    }] subscribeNext:^(id  _Nullable x) {
+        // 只会打印出300
+        NSLog(@"%@",x);
+    }];
+    
+    
+}
+
+
+/**
+    压缩信号订阅之后再次进行解压
+*/
+
+- (void)zip
+{
+    
+    RACSignal *sg1 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+            [subscriber sendNext: @"Fromsg1"];
+            [subscriber sendCompleted];
+        return nil;
+    }];
+    
+    RACSignal *sg2 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        
+        [subscriber sendNext: @"Fromsg2"];
+        [subscriber sendCompleted];
+        return nil;
+    }];
+    
+    // 信号订阅
+    [[sg1 zipWith:sg2]subscribeNext:^(id  _Nullable x) {
+        
+        // 解压缩
+        RACTupleUnpack(NSString *str1,NSString *str2) = x;
+        NSLog(@"%@---%@",str1,str2);
+        
     }];
     
 }
 
 
-- (void)mapDemo
+
+
+/**
+    数组中的信号被打包成一个信号
+    被打包的信号都要完成信号的发送信号才可以被订阅
+    都能正常被订阅接收信号
+ */
+
+- (void)combineLatest
+{
+    // 因为信号sg1 没有完成发送 所以信号不能被订阅
+    RACSignal *sg1 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+//        [subscriber sendNext: @"Fromsg1"];
+//        [subscriber sendCompleted];
+        return nil;
+    }];
+    
+    RACSignal *sg2 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        
+        [subscriber sendNext: @"Fromsg2"];
+        [subscriber sendCompleted];
+        return nil;
+    }];
+    
+    RACSignal *combineSig = [RACSignal combineLatest:@[sg1,sg2]];
+    // 订阅信号
+    [combineSig subscribeNext:^(id  _Nullable x) {
+        //  打印的是 RACTuple
+        NSLog(@"%@",x);
+    }];
+    
+}
+
+/**
+ // 数组中的信号被打包成一个信号 只要数组中的信号任何一个完成信号的发送
+ // 都能正常被订阅接收信号
+ */
+- (void)merge
+{
+    RACSignal *sg1 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+       
+        [subscriber sendNext: @"Fromsg1"];
+        [subscriber sendCompleted];
+        return nil;
+    }];
+    
+    
+    RACSignal *sg2 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        
+        [subscriber sendNext: @"Fromsg2"];
+        [subscriber sendCompleted];
+        return nil;
+    }];
+    
+
+    RACSignal *mergeSig = [RACSignal merge:@[sg1,sg2]];
+    
+    // 订阅信号
+    [mergeSig subscribeNext:^(id  _Nullable x) {
+        NSLog(@"%@",x);
+    }];
+    
+    
+}
+
+
+
+
+
+/**
+  信号的串联
+  把控代码的执行顺序 如下面的例子 顺序下载图片
+ 
+ */
+- (void)concat
+{
+    
+    
+    RACSignal *sg1 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+        
+        // 线程是阻塞的
+        NSURLSession *session = [NSURLSession sharedSession];
+        NSURLSessionDataTask *task = [session dataTaskWithRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://qzonestyle.gtimg.cn/qzone/app/weishi/client/testimage/1024/36.jpg"]] completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+            if (!error) {
+                [subscriber sendNext:@"Hellosg1"];
+                [subscriber sendCompleted];
+                NSLog(@"sg1");
+                
+            }
+        }];
+        
+        [task resume];
+        
+
+        return nil;
+    }];
+    
+    RACSignal *sg2 = [RACSignal createSignal:^RACDisposable * _Nullable(id<RACSubscriber>  _Nonnull subscriber) {
+     
+        NSURLSession *session = [NSURLSession sharedSession];
+        NSURLSessionDataTask *task = [session dataTaskWithRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:@"http://qzonestyle.gtimg.cn/qzone/app/weishi/client/testimage/1024/56.jpg"]] completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+            if (!error) {
+                
+                
+                [subscriber sendNext:@"Hellosg2"];
+                [subscriber sendCompleted];
+                NSLog(@"sg2");
+            }
+        }];
+        
+        [task resume];
+        
+        return nil;
+    }];
+    
+    RACSignal *conSig = [sg1 concat: sg2];
+    
+    // 订阅信号
+    [conSig subscribeNext:^(id  _Nullable x) {
+        NSLog(@"%@",x);
+    }];
+    
+}
+
+- (void)map
 {
     // 0  创建信号提供者
     // RACSubject，既能发送信号，又能订阅信号
